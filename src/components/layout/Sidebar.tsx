@@ -14,6 +14,7 @@ import {
   Briefcase,
   Menu,
   X,
+  PlusCircle,
 } from 'lucide-react'
 
 const navigation = [
@@ -22,6 +23,7 @@ const navigation = [
   { name: 'Portfolio', href: '/portfolio', icon: Briefcase },
   { name: 'Investidas (Add-ons)', href: '/investidas', icon: Target },
   { name: 'Interações', href: '/interacoes', icon: Users },
+  { name: 'Cadastrar', href: '/cadastrar', icon: PlusCircle },
   { name: 'Importar Excel', href: '/importar', icon: FileSpreadsheet },
 ]
 

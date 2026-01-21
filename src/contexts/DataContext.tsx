@@ -115,14 +115,24 @@ type DataContextType = {
   importData: (newData: Partial<ImportedData>, fileName?: string) => void
   clearData: () => void
   hasData: boolean
+  // Funções para fundos
+  addFundo: (fundo: Omit<FundoData, 'id'>) => string
+  updateFundo: (id: string, fundo: Partial<FundoData>) => void
+  deleteFundo: (id: string) => void
   // Funções para interações
   addInteracao: (interacao: Omit<InteracaoData, 'id'>) => void
   updateInteracao: (id: string, interacao: Partial<InteracaoData>) => void
   deleteInteracao: (id: string) => void
   getInteracoesByFundo: (fundoId: string) => InteracaoData[]
+  // Funções para portfolio
+  addPortfolioEmpresa: (empresa: Omit<PortfolioEmpresa, 'id'>) => void
+  updatePortfolioEmpresa: (id: string, empresa: Partial<PortfolioEmpresa>) => void
+  deletePortfolioEmpresa: (id: string) => void
   // Funções para fundos integrados
   getFundosComInteracoes: () => FundoComInteracoes[]
   getFundoComInteracoes: (fundoId: string) => FundoComInteracoes | undefined
+  // Export para Excel
+  exportToExcel: () => void
 }
 
 const defaultData: ImportedData = {
@@ -836,6 +846,36 @@ export function DataProvider({ children }: { children: ReactNode }) {
     setError(null)
   }, [])
 
+  // Adicionar fundo
+  const addFundo = useCallback((fundo: Omit<FundoData, 'id'>): string => {
+    const newId = `fundo_${Date.now()}`
+    setData(prev => ({
+      ...prev,
+      fundos: [...prev.fundos, { ...fundo, id: newId }],
+    }))
+    return newId
+  }, [])
+
+  // Atualizar fundo
+  const updateFundo = useCallback((id: string, updates: Partial<FundoData>) => {
+    setData(prev => ({
+      ...prev,
+      fundos: prev.fundos.map(f =>
+        f.id === id ? { ...f, ...updates } : f
+      ),
+    }))
+  }, [])
+
+  // Deletar fundo
+  const deleteFundo = useCallback((id: string) => {
+    setData(prev => ({
+      ...prev,
+      fundos: prev.fundos.filter(f => f.id !== id),
+      interacoes: prev.interacoes.filter(int => int.fundoId !== id),
+      portfolio: prev.portfolio.filter(p => p.fundoId !== id),
+    }))
+  }, [])
+
   // Adicionar interação
   const addInteracao = useCallback((interacao: Omit<InteracaoData, 'id'>) => {
     const newId = `int_${Date.now()}`
@@ -869,6 +909,33 @@ export function DataProvider({ children }: { children: ReactNode }) {
       .filter(int => int.fundoId === fundoId)
       .sort((a, b) => parseData(b.data).getTime() - parseData(a.data).getTime())
   }, [data.interacoes])
+
+  // Adicionar empresa ao portfolio
+  const addPortfolioEmpresa = useCallback((empresa: Omit<PortfolioEmpresa, 'id'>) => {
+    const newId = `port_${Date.now()}`
+    setData(prev => ({
+      ...prev,
+      portfolio: [...prev.portfolio, { ...empresa, id: newId }],
+    }))
+  }, [])
+
+  // Atualizar empresa do portfolio
+  const updatePortfolioEmpresa = useCallback((id: string, updates: Partial<PortfolioEmpresa>) => {
+    setData(prev => ({
+      ...prev,
+      portfolio: prev.portfolio.map(p =>
+        p.id === id ? { ...p, ...updates } : p
+      ),
+    }))
+  }, [])
+
+  // Deletar empresa do portfolio
+  const deletePortfolioEmpresa = useCallback((id: string) => {
+    setData(prev => ({
+      ...prev,
+      portfolio: prev.portfolio.filter(p => p.id !== id),
+    }))
+  }, [])
 
   // Obter fundos com dados integrados das interações
   const getFundosComInteracoes = useCallback((): FundoComInteracoes[] => {
@@ -911,6 +978,72 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return fundos.find(f => f.id === fundoId)
   }, [getFundosComInteracoes])
 
+  // Exportar dados para Excel (backup)
+  const exportToExcel = useCallback(async () => {
+    try {
+      const XLSX = await import('xlsx')
+
+      // Preparar dados dos fundos
+      const fundosSheet = data.fundos.map(f => ({
+        'Nome': f.nome,
+        'Tipo': f.tipoFundo || '',
+        'Contato': f.contato || '',
+        'Email': f.email || '',
+        'Telefone': f.telefone || '',
+        'Website': f.website || '',
+        'Setores': f.setores?.join(', ') || '',
+      }))
+
+      // Preparar dados das interações
+      const interacoesSheet = data.interacoes.map(i => ({
+        'Fundo': i.fundoNome,
+        'Data': i.data,
+        'Hora': i.hora,
+        'Participantes': i.participantes.join(', '),
+        'Resumo': i.resumo,
+        'Ticket Médio': i.criterios?.ticketMedio || '',
+        'EBITDA Mínimo': i.criterios?.ebitdaMinimo || '',
+        'Faturamento Mínimo': i.criterios?.faturamentoMinimo || '',
+        'Deal Ideal': i.criterios?.dealIdeal || '',
+        'Posição': i.criterios?.posicao || '',
+        'Setores': i.criterios?.setores?.join(', ') || '',
+        'Disponibilidade': i.criterios?.disponibilidadeFundo || '',
+      }))
+
+      // Preparar dados do portfolio
+      const portfolioSheet = data.portfolio.map(p => ({
+        'Fundo': p.fundoNome,
+        'Empresa': p.nome,
+        'Setor': p.setor,
+        'Ano Investimento': p.anoInvestimento || '',
+        'Status': p.status,
+        'Descrição': p.descricao || '',
+        'Buscando Add-on': p.buscandoAddOn ? 'Sim' : 'Não',
+        'Segmentos Add-on': p.segmentosAddOn?.join(', ') || '',
+        'Ticket Add-on': p.ticketAddOn || '',
+      }))
+
+      // Criar workbook
+      const wb = XLSX.utils.book_new()
+
+      const wsFundos = XLSX.utils.json_to_sheet(fundosSheet)
+      XLSX.utils.book_append_sheet(wb, wsFundos, 'Fundos')
+
+      const wsInteracoes = XLSX.utils.json_to_sheet(interacoesSheet)
+      XLSX.utils.book_append_sheet(wb, wsInteracoes, 'Interações')
+
+      const wsPortfolio = XLSX.utils.json_to_sheet(portfolioSheet)
+      XLSX.utils.book_append_sheet(wb, wsPortfolio, 'Portfolio')
+
+      // Gerar e baixar arquivo
+      const date = new Date().toISOString().split('T')[0]
+      XLSX.writeFile(wb, `Volt_PE_Backup_${date}.xlsx`)
+    } catch (err) {
+      console.error('Erro ao exportar Excel:', err)
+      setError('Erro ao exportar dados para Excel')
+    }
+  }, [data])
+
   const hasData = data.fundos.length > 0 || data.investidas.length > 0 || data.transacoes.length > 0 || data.interacoes.length > 0
 
   return (
@@ -921,12 +1054,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
       importData,
       clearData,
       hasData,
+      addFundo,
+      updateFundo,
+      deleteFundo,
       addInteracao,
       updateInteracao,
       deleteInteracao,
       getInteracoesByFundo,
+      addPortfolioEmpresa,
+      updatePortfolioEmpresa,
+      deletePortfolioEmpresa,
       getFundosComInteracoes,
       getFundoComInteracoes,
+      exportToExcel,
     }}>
       {children}
     </DataContext.Provider>
