@@ -1,6 +1,9 @@
 'use client'
 
-import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode } from 'react'
+import React, { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect } from 'react'
+
+// Chave para localStorage
+const STORAGE_KEY = 'volt_pe_data'
 
 // Tipos de fundo
 export type TipoFundo = 'PE' | 'VC' | 'Wealth' | 'Family Office' | 'Outros'
@@ -817,6 +820,45 @@ export function DataProvider({ children }: { children: ReactNode }) {
   })
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isHydrated, setIsHydrated] = useState(false)
+
+  // Carregar dados do localStorage ao iniciar
+  useEffect(() => {
+    try {
+      const savedData = localStorage.getItem(STORAGE_KEY)
+      if (savedData) {
+        const parsed = JSON.parse(savedData)
+        setData(prev => ({
+          ...prev,
+          fundos: parsed.fundos || fundosExemplo,
+          interacoes: parsed.interacoes || interacoesExemplo,
+          portfolio: parsed.portfolio || portfolioExemplo,
+          investidas: parsed.investidas || [],
+          transacoes: parsed.transacoes || [],
+        }))
+      }
+    } catch (err) {
+      console.error('Erro ao carregar dados do localStorage:', err)
+    }
+    setIsHydrated(true)
+  }, [])
+
+  // Salvar dados no localStorage sempre que mudar
+  useEffect(() => {
+    if (isHydrated) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          fundos: data.fundos,
+          interacoes: data.interacoes,
+          portfolio: data.portfolio,
+          investidas: data.investidas,
+          transacoes: data.transacoes,
+        }))
+      } catch (err) {
+        console.error('Erro ao salvar dados no localStorage:', err)
+      }
+    }
+  }, [data, isHydrated])
 
   const importData = useCallback((newData: Partial<ImportedData>, fileName?: string) => {
     setIsLoading(true)
@@ -844,6 +886,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       portfolio: portfolioExemplo,
     })
     setError(null)
+    // Limpar localStorage também
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch (err) {
+      console.error('Erro ao limpar localStorage:', err)
+    }
   }, [])
 
   // Adicionar fundo

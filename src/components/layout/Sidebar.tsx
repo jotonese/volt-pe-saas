@@ -19,7 +19,7 @@ import {
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Fundos de PE', href: '/fundos', icon: Building2 },
+  { name: 'Fundos', href: '/fundos', icon: Building2 },
   { name: 'Portfolio', href: '/portfolio', icon: Briefcase },
   { name: 'Investidas (Add-ons)', href: '/investidas', icon: Target },
   { name: 'Interações', href: '/interacoes', icon: Users },

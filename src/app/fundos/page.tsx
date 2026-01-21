@@ -103,7 +103,7 @@ export default function FundosPage() {
   return (
     <div className="flex flex-col min-h-screen">
       <Header
-        title="Fundos de Private Equity"
+        title="Fundos"
         subtitle={`${fundosData.length} fundos mapeados`}
       />
 
@@ -122,7 +122,7 @@ export default function FundosPage() {
                 onChange={(e) => setSearch(e.target.value)}
               />
             </div>
-            <Button className="ml-auto">
+            <Button className="ml-auto" onClick={() => router.push('/cadastrar')}>
               <Plus className="h-4 w-4 mr-2" />
               Novo Fundo
             </Button>
@@ -222,6 +222,7 @@ export default function FundosPage() {
               <Card
                 key={fundo.id}
                 className="hover:shadow-md transition-shadow cursor-pointer"
+                onClick={() => router.push(`/fundos/${fundo.id}`)}
               >
                 <CardContent className="p-6">
                   <div className="flex items-start justify-between">
