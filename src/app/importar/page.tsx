@@ -365,24 +365,54 @@ export default function ImportarPage() {
           </CardHeader>
           <CardContent className="space-y-4 text-sm text-slate-600">
             <p>
-              O sistema espera um arquivo Excel com a seguinte estrutura:
+              O sistema espera um arquivo Excel com as seguintes colunas:
             </p>
-            <ul className="list-disc list-inside space-y-2">
-              <li>
-                <strong>Aba "Fundos PE":</strong> Lista de fundos com nome, setores de interesse, critérios de faturamento e cheque
-              </li>
-              <li>
-                <strong>Aba "Investidas":</strong> Empresas investidas buscando add-ons, organizadas por setor
-              </li>
-              <li>
-                <strong>Aba "Transações":</strong> Transações recentes do mercado com target, buyer e valor
-              </li>
-              <li>
-                <strong>Aba "Cotações":</strong> Dados históricos de cotações de empresas listadas (opcional)
-              </li>
-            </ul>
-            <p className="text-slate-500 italic">
-              O arquivo "Copy of Fundos_PE v3.xlsx" já está no formato esperado.
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm border rounded-lg">
+                <thead className="bg-slate-100">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-medium">Coluna</th>
+                    <th className="px-3 py-2 text-left font-medium">Descrição</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  <tr>
+                    <td className="px-3 py-2 font-medium">Fundo</td>
+                    <td className="px-3 py-2 text-slate-500">Nome do fundo de PE</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 font-medium">Ticket</td>
+                    <td className="px-3 py-2 text-slate-500">Ticket médio de investimento (ex: R$ 100-300mi)</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 font-medium">Tipo ideal de deal/empresa</td>
+                    <td className="px-3 py-2 text-slate-500">Controle, Minoritário, etc.</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 font-medium">Setores de maior interesse</td>
+                    <td className="px-3 py-2 text-slate-500">Setores em que o fundo investe</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 font-medium">Portfolio</td>
+                    <td className="px-3 py-2 text-slate-500">Empresas do portfolio atual</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 font-medium">Contatos chave</td>
+                    <td className="px-3 py-2 text-slate-500">Nome dos contatos principais</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 font-medium">Telefone</td>
+                    <td className="px-3 py-2 text-slate-500">Telefone de contato</td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2 font-medium">E-mail</td>
+                    <td className="px-3 py-2 text-slate-500">E-mail de contato</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <p className="text-slate-500 italic mt-4">
+              O sistema reconhece automaticamente variações nos nomes das colunas.
             </p>
           </CardContent>
         </Card>

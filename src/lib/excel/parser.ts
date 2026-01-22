@@ -67,60 +67,121 @@ export function parseExcelFile(buffer: ArrayBuffer): ExcelData {
 }
 
 /**
- * Extrai dados de fundos do Excel - Específico para "Copy of Fundos_PE v3.xlsx"
- * A Coluna B (índice 1) contém os nomes dos fundos
- * NOTA: O header "Fundo" está mesclado e cobre colunas A (logos) e B (nomes)
+ * Encontra o índice de uma coluna pelo nome (case-insensitive, parcial)
+ */
+function findColumnIndex(headers: string[], ...possibleNames: string[]): number {
+  for (const name of possibleNames) {
+    const nameLower = name.toLowerCase()
+    const index = headers.findIndex(h =>
+      h && h.toLowerCase().includes(nameLower)
+    )
+    if (index !== -1) return index
+  }
+  return -1
+}
+
+/**
+ * Obtém valor de uma linha por nome de coluna ou índice
+ */
+function getRowValue(row: Record<string, any>, headers: string[], ...possibleNames: string[]): any {
+  // Primeiro tenta pelo nome exato
+  for (const name of possibleNames) {
+    if (row[name] !== undefined && row[name] !== null && row[name] !== '') {
+      return row[name]
+    }
+  }
+
+  // Depois tenta encontrar pelo header parcial
+  const colIndex = findColumnIndex(headers, ...possibleNames)
+  if (colIndex !== -1) {
+    const colValue = row[`__col_${colIndex}`]
+    if (colValue !== undefined && colValue !== null && colValue !== '') {
+      return colValue
+    }
+  }
+
+  return ''
+}
+
+/**
+ * Extrai dados de fundos do Excel
+ * Colunas esperadas: Fundo, Ticket, Tipo ideal de deal/empresa, Setores de maior interesse, Portfolio, Contatos chave, Telefone, E-mail
  */
 export function extractFundosData(excelData: ExcelData): FundoData[] {
-  // Procura pela aba "Targets" primeiro, depois outras possibilidades
-  const fundosSheet = excelData.sheets.find(s =>
-    s.sheetName.toLowerCase() === 'targets'
-  ) || excelData.sheets.find(s => {
+  // Procura pela primeira aba que tenha dados de fundos
+  const fundosSheet = excelData.sheets.find(s => {
     const name = s.sheetName.toLowerCase()
     return name.includes('fundo') ||
+           name.includes('target') ||
            name.includes('pe') ||
            name.includes('gestor')
   }) || excelData.sheets[0]
 
   if (!fundosSheet || fundosSheet.rows.length === 0) return []
 
+  const headers = fundosSheet.headers
+
+  // Log para debug
+  console.log('=== HEADERS ENCONTRADOS ===')
+  console.log(headers)
+
   return fundosSheet.rows.map((row, index): FundoData => {
-    // Mapeamento específico para a estrutura do Excel "Copy of Fundos_PE v3.xlsx"
-    // IMPORTANTE: Header "Fundo" é mesclado (colunas A e B)
-    // Coluna A (índice 0) = logos (ignorar)
-    // Coluna B (índice 1) = nomes dos fundos
+    // Mapeamento flexível para as colunas esperadas
+    // Fundo - pode ser "Fundo", "Nome", "Nome do Fundo"
+    const nome = getRowValue(row, headers, 'Fundo', 'Nome', 'Nome do Fundo') ||
+                 row['__col_0'] || row['__col_1'] || `Fundo ${index + 1}`
 
-    // Acessar diretamente por índice de coluna usando __col_X
-    const nome = row['__col_1'] || row['Fundo'] || row['Nome'] || `Fundo ${index + 1}`
+    // Ticket - pode ser "Ticket", "Ticket Médio", "Cheque"
+    const ticket = getRowValue(row, headers, 'Ticket', 'Ticket Médio', 'Cheque', 'Ticket médio')
 
-    const ticket = row['Ticket'] || row['__col_2'] || ''
-    const tipoIdeal = row['Tipo ideal de deal / empresa'] || row['__col_3'] || ''
-    const setoresInteresse = row['Setores de maior interesse / restrições'] || row['__col_4'] || ''
-    const portfolio = row['Portfolio'] || row['__col_5'] || ''
-    const contato = row['Contatos chave'] || row['__col_6'] || ''
-    const telefone = row['Telefone'] || row['__col_7'] || ''
-    const email = row['Email'] || row['__col_8'] || ''
-    const descritivo = row['Descritivo '] || row['Descritivo'] || row['__col_9'] || ''
+    // Tipo ideal de deal/empresa
+    const tipoIdeal = getRowValue(row, headers, 'Tipo ideal', 'Tipo de deal', 'Deal ideal', 'Tipo ideal de deal')
 
-    // Extrair setores do campo "Setores de maior interesse / restrições"
-    // Tentar pegar apenas os setores principais, não as notas detalhadas
-    const setoresExtraidos = extrairSetores(setoresInteresse)
+    // Setores de maior interesse
+    const setoresInteresse = getRowValue(row, headers, 'Setores', 'Setores de maior interesse', 'Setor', 'Interesse')
+
+    // Portfolio
+    const portfolio = getRowValue(row, headers, 'Portfolio', 'Portfólio', 'Empresas')
+
+    // Contatos chave
+    const contato = getRowValue(row, headers, 'Contatos chave', 'Contato', 'Contatos', 'Responsável')
+
+    // Telefone
+    const telefone = getRowValue(row, headers, 'Telefone', 'Tel', 'Phone', 'Celular')
+
+    // E-mail
+    const email = getRowValue(row, headers, 'E-mail', 'Email', 'Mail', 'E-Mail')
+
+    // Extrair setores do campo "Setores de maior interesse"
+    const setoresExtraidos = extrairSetores(String(setoresInteresse || ''))
+
+    // Log para debug do primeiro fundo
+    if (index === 0) {
+      console.log('=== PRIMEIRO FUNDO MAPEADO ===')
+      console.log({ nome, ticket, tipoIdeal, setoresInteresse, portfolio, contato, telefone, email })
+    }
 
     return {
       id: `fundo-${index + 1}`,
       nome: String(nome).trim(),
       setor: setoresExtraidos[0] || undefined,
       setores: setoresExtraidos,
-      ticket: ticket,
-      tipoIdeal: tipoIdeal,
-      setoresInteresse: setoresInteresse,
-      portfolio: portfolio,
-      contato: String(contato).trim() || undefined,
-      telefone: String(telefone).trim() || undefined,
-      email: String(email).trim() || undefined,
-      descritivo: descritivo,
+      ticketMedio: String(ticket || '').trim() || undefined,
+      dealIdeal: String(tipoIdeal || '').trim() || undefined,
+      portfolio: String(portfolio || '').trim() || undefined,
+      contato: String(contato || '').trim() || undefined,
+      telefone: String(telefone || '').trim() || undefined,
+      email: String(email || '').trim() || undefined,
     }
-  }).filter(fundo => fundo.nome && fundo.nome !== `Fundo ${0}` && fundo.nome !== 'undefined') // Filtrar linhas sem nome
+  }).filter(fundo => {
+    // Filtrar linhas vazias ou sem nome válido
+    const nomeValido = fundo.nome &&
+                       fundo.nome.trim() !== '' &&
+                       !fundo.nome.startsWith('Fundo ') &&
+                       fundo.nome !== 'undefined' &&
+                       fundo.nome.toLowerCase() !== 'fundo'
+    return nomeValido
+  })
 }
 
 /**
