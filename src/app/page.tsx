@@ -59,8 +59,9 @@ type SetorAgregado = {
 }
 
 export default function DashboardPage() {
-  const { getFundosComInteracoes } = useData()
+  const { getFundosComInteracoes, data } = useData()
   const fundos = getFundosComInteracoes()
+  const portfolio = data.portfolio
 
   // Agregar dados por setor
   const dadosPorSetor = useMemo(() => {
@@ -90,11 +91,13 @@ export default function DashboardPage() {
         const dados = setoresMap.get(setor)!
         dados.fundos.add(fundo.id)
 
-        // Coletar segmentos de interesse do fundo para este setor
-        // Os segmentos podem vir de diferentes fontes
-        if (fundo.segmentos) {
-          fundo.segmentos.forEach(seg => dados.segmentos.add(seg))
-        }
+        // Coletar segmentos de interesse das empresas do portfolio que buscam add-ons
+        const empresasFundo = portfolio.filter(p => p.fundoId === fundo.id)
+        empresasFundo.forEach(empresa => {
+          if (empresa.buscandoAddOn && empresa.segmentosAddOn) {
+            empresa.segmentosAddOn.forEach(seg => dados.segmentos.add(seg))
+          }
+        })
 
         // Processar faturamento mínimo
         const faturamento = fundo.faturamentoMinimo || fundo.criteriosAtuais?.faturamentoMinimo
@@ -133,7 +136,7 @@ export default function DashboardPage() {
     resultado.sort((a, b) => b.numFundos - a.numFundos)
 
     return resultado
-  }, [fundos])
+  }, [fundos, portfolio])
 
   return (
     <div className="flex flex-col min-h-screen">
