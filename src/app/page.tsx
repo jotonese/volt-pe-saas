@@ -91,7 +91,12 @@ export default function DashboardPage() {
         const dados = setoresMap.get(setor)!
         dados.fundos.add(fundo.id)
 
-        // Coletar segmentos de interesse das empresas do portfolio que buscam add-ons
+        // Coletar segmentos de interesse extraídos do Excel (do próprio fundo)
+        if (fundo.segmentos && Array.isArray(fundo.segmentos)) {
+          fundo.segmentos.forEach(seg => dados.segmentos.add(seg))
+        }
+
+        // Também coletar segmentos de interesse das empresas do portfolio que buscam add-ons
         const empresasFundo = portfolio.filter(p => p.fundoId === fundo.id)
         empresasFundo.forEach(empresa => {
           if (empresa.buscandoAddOn && empresa.segmentosAddOn) {
