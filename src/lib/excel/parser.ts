@@ -99,28 +99,70 @@ function getRowValue(row: Record<string, any>, headers: string[], ...possibleNam
 }
 
 /**
+ * Extrai a informação mais recente de uma célula de texto com múltiplas datas
+ * Formato: "02/25: info aqui. 03/24: outra info. 05/22: info mais antiga"
+ */
+function extrairInfoMaisRecente(texto: string): string {
+  if (!texto) return ''
+
+  // Padrão para encontrar datas no formato MM/YY: ou MM/YYYY:
+  const pattern = /(\d{2}\/\d{2,4}):\s*/g
+  const matches = [...texto.matchAll(pattern)]
+
+  if (matches.length === 0) {
+    // Não tem padrão de data, retornar texto completo
+    return texto
+  }
+
+  // Pegar a primeira entrada (mais recente)
+  const firstMatch = matches[0]
+  const startIndex = firstMatch.index! + firstMatch[0].length
+
+  // Encontrar onde termina (próxima data ou fim)
+  let endIndex = texto.length
+  if (matches.length > 1) {
+    endIndex = matches[1].index!
+  }
+
+  return texto.substring(startIndex, endIndex).trim()
+}
+
+/**
  * Extrai valores monetários de um texto (R$ X-Ymi, USD Xmi, etc)
- * Retorna o primeiro valor encontrado ou range
+ * Retorna o valor encontrado na informação mais recente
  */
 function extrairValorMonetario(texto: string): string | undefined {
   if (!texto) return undefined
 
+  // Primeiro, pegar a info mais recente
+  const infoRecente = extrairInfoMaisRecente(texto)
+
   // Padrões para encontrar valores monetários
   const patterns = [
-    // R$ 100-300mi, R$ 100 a 300 mi
-    /R\$\s*(\d+(?:[.,]\d+)?)\s*[-–a]\s*(\d+(?:[.,]\d+)?)\s*(?:mi|milhões|M)/gi,
+    // R$ 100-300 mi, R$ 100 a 300 mi
+    /R\$\s*(\d+(?:[.,]\d+)?)\s*[-–a]\s*(\d+(?:[.,]\d+)?)\s*(?:mi|milhões|M\b)/gi,
     // USD 50-100mi, US$ 50-100mi
-    /(?:USD|US\$)\s*(\d+(?:[.,]\d+)?)\s*[-–a]\s*(\d+(?:[.,]\d+)?)\s*(?:mi|milhões|M)/gi,
-    // R$ 100mi, R$ 100 milhões
-    /R\$\s*(\d+(?:[.,]\d+)?)\s*(?:mi|milhões|M)/gi,
+    /(?:USD|US\$)\s*(\d+(?:[.,]\d+)?)\s*[-–a]\s*(\d+(?:[.,]\d+)?)\s*(?:mi|milhões|M\b)/gi,
+    // R$ 100 mi, R$ 100 milhões
+    /R\$\s*(\d+(?:[.,]\d+)?)\s*(?:mi|milhões|M\b)/gi,
     // USD 50mi, US$ 50mi
-    /(?:USD|US\$)\s*(\d+(?:[.,]\d+)?)\s*(?:mi|milhões|M)/gi,
-    // 100-300mi (sem prefixo de moeda)
-    /(\d+(?:[.,]\d+)?)\s*[-–a]\s*(\d+(?:[.,]\d+)?)\s*(?:mi|milhões)/gi,
-    // 100mi, 100 milhões
-    /(\d+(?:[.,]\d+)?)\s*(?:mi(?:lhões)?)/gi,
+    /(?:USD|US\$)\s*(\d+(?:[.,]\d+)?)\s*(?:mi|milhões|M\b)/gi,
+    // R$ 3,6 bi
+    /R\$\s*(\d+(?:[.,]\d+)?)\s*(?:bi|bilhões|B\b)/gi,
+    // Cheques de R$ 100 mi
+    /cheques?\s+(?:de\s+)?R\$\s*(\d+(?:[.,]\d+)?)\s*(?:mi|milhões)/gi,
+    // Tickets R$ 100-150 milhões
+    /tickets?\s+(?:de\s+)?R\$\s*(\d+(?:[.,]\d+)?)\s*[-–a]?\s*(\d+(?:[.,]\d+)?)?\s*(?:mi|milhões)/gi,
   ]
 
+  for (const pattern of patterns) {
+    const match = infoRecente.match(pattern)
+    if (match && match[0]) {
+      return match[0].trim()
+    }
+  }
+
+  // Se não encontrou na info recente, buscar no texto completo
   for (const pattern of patterns) {
     const match = texto.match(pattern)
     if (match && match[0]) {
@@ -137,25 +179,23 @@ function extrairValorMonetario(texto: string): string | undefined {
 function extrairFaturamentoMinimo(texto: string): string | undefined {
   if (!texto) return undefined
 
-  const textoLower = texto.toLowerCase()
+  const infoRecente = extrairInfoMaisRecente(texto)
+  const textos = [infoRecente, texto]
 
-  // Procurar por padrões de faturamento
-  const faturamentoPatterns = [
-    /faturamento\s*(?:mínimo|min|de|acima de|>|maior que)?\s*(?:de)?\s*(R\$\s*\d+(?:[.,]\d+)?\s*(?:[-–a]\s*\d+(?:[.,]\d+)?)?\s*(?:mi|milhões|M))/gi,
-    /(?:mínimo|min)\s*(?:de)?\s*faturamento\s*(?:de)?\s*(R\$\s*\d+(?:[.,]\d+)?\s*(?:[-–a]\s*\d+(?:[.,]\d+)?)?\s*(?:mi|milhões|M))/gi,
-    /receita\s*(?:mínima|de|acima de)?\s*(R\$\s*\d+(?:[.,]\d+)?\s*(?:[-–a]\s*\d+(?:[.,]\d+)?)?\s*(?:mi|milhões|M))/gi,
-  ]
+  for (const t of textos) {
+    // Padrões para faturamento
+    const faturamentoPatterns = [
+      /fat(?:uramento)?\s*(?:mín(?:imo)?|de|acima de|>|maior que|líquido)?\s*(?:de|deve ser maior que)?\s*(R\$\s*\d+(?:[.,]\d+)?\s*(?:[-–a]\s*\d+(?:[.,]\d+)?)?\s*(?:mi|milhões|M\b))/gi,
+      /faturamento\s+(?:mínimo\s+)?(?:de\s+)?(R\$\s*\d+(?:[.,]\d+)?)/gi,
+      /EBITDA\s*(?:mínimo)?\s*(?:de)?\s*(R\$\s*\d+(?:[.,]\d+)?(?:\s*[-–a]\s*\d+(?:[.,]\d+)?)?\s*(?:mi|milhões)?)/gi,
+    ]
 
-  for (const pattern of faturamentoPatterns) {
-    const match = texto.match(pattern)
-    if (match && match[1]) {
-      return match[1].trim()
+    for (const pattern of faturamentoPatterns) {
+      const match = t.match(pattern)
+      if (match && match[1]) {
+        return match[1].trim()
+      }
     }
-  }
-
-  // Se não encontrou padrão específico de faturamento, mas tem "faturamento" no texto
-  if (textoLower.includes('faturamento') || textoLower.includes('receita')) {
-    return extrairValorMonetario(texto)
   }
 
   return undefined
@@ -167,21 +207,13 @@ function extrairFaturamentoMinimo(texto: string): string | undefined {
 function extrairTicket(texto: string): string | undefined {
   if (!texto) return undefined
 
-  // Procurar por padrões de ticket
-  const ticketPatterns = [
-    /ticket\s*(?:médio|de|mínimo)?\s*(?:de)?\s*((?:R\$|USD|US\$)\s*\d+(?:[.,]\d+)?\s*(?:[-–a]\s*\d+(?:[.,]\d+)?)?\s*(?:mi|milhões|M))/gi,
-    /cheque\s*(?:médio|de|mínimo)?\s*(?:de)?\s*((?:R\$|USD|US\$)\s*\d+(?:[.,]\d+)?\s*(?:[-–a]\s*\d+(?:[.,]\d+)?)?\s*(?:mi|milhões|M))/gi,
-    /sweet\s*spot\s*(?:de)?\s*((?:R\$|USD|US\$)\s*\d+(?:[.,]\d+)?\s*(?:[-–a]\s*\d+(?:[.,]\d+)?)?\s*(?:mi|milhões|M))/gi,
-  ]
+  const infoRecente = extrairInfoMaisRecente(texto)
 
-  for (const pattern of ticketPatterns) {
-    const match = texto.match(pattern)
-    if (match && match[1]) {
-      return match[1].trim()
-    }
-  }
+  // Primeiro tentar extrair da info mais recente
+  let valor = extrairValorMonetario(infoRecente)
+  if (valor) return valor
 
-  // Se a coluna é especificamente de ticket, pegar qualquer valor monetário
+  // Se não, do texto completo
   return extrairValorMonetario(texto)
 }
 
@@ -193,6 +225,7 @@ function extrairSegmentosDeInteresse(texto: string): string[] {
   if (!texto) return []
 
   const segmentos: string[] = []
+  const textoLower = texto.toLowerCase()
 
   // Lista de segmentos/subsetores específicos para identificar
   const segmentosConhecidos: { [key: string]: string[] } = {
@@ -205,70 +238,102 @@ function extrairSegmentosDeInteresse(texto: string): string[] {
     'Healthtech': ['healthtech', 'health tech', 'tech em saúde'],
     'Edtech': ['edtech', 'ed tech', 'tech em educação'],
     'Proptech': ['proptech', 'prop tech'],
-    'Agtech': ['agtech', 'ag tech', 'agrotech'],
+    'Agtech': ['agtech', 'ag tech', 'agrotech', 'agrotecnologia'],
     'Logtech': ['logtech', 'log tech'],
     'HRtech': ['hrtech', 'hr tech'],
     'Legaltech': ['legaltech', 'legal tech'],
     'Insurtech': ['insurtech', 'insur tech'],
-    'Marketplace': ['marketplace', 'plataforma'],
+    'Govtech': ['govtech', 'gov tech'],
+    'Marketplace': ['marketplace'],
     'E-commerce': ['e-commerce', 'ecommerce', 'comércio eletrônico'],
     'Cloud': ['cloud', 'nuvem'],
-    'IA': ['inteligência artificial', 'ia ', 'ai ', 'machine learning', 'ml'],
+    'IA/ML': ['inteligência artificial', ' ia ', ' ai ', 'machine learning', ' ml '],
     'Data Analytics': ['analytics', 'data analytics', 'big data'],
-    'ERP': ['erp', 'gestão empresarial'],
-    'CRM': ['crm'],
+    'ERP': [' erp ', 'gestão empresarial'],
+    'CRM': [' crm '],
+    'Software': ['software', 'sistemas'],
+    'TMT': [' tmt ', 'tecnologia, mídia'],
+    'Fibra Ótica': ['fibra', 'fibra ótica', 'provedores internet'],
     // Saúde
     'Hospitais': ['hospital', 'hospitais', 'hospitalar'],
     'Clínicas': ['clínica', 'clinica', 'clínicas'],
-    'Laboratórios': ['laboratório', 'laboratorio', 'lab ', 'labs'],
+    'Laboratórios': ['laboratório', 'laboratorio', 'lab de', 'labs de', 'medicina diagnóstica'],
     'Diagnóstico': ['diagnóstico', 'diagnostico', 'diagnose'],
-    'Farmacêutico': ['farmacêutic', 'farmaceutic', 'pharma'],
+    'Farmacêutico': ['farmacêutic', 'farmaceutic', 'pharma', 'medicamento'],
     'Equipamentos Médicos': ['equipamento médico', 'equipamentos médicos', 'dispositivos médicos'],
-    'Dental': ['dental', 'odonto', 'odontológic'],
-    'Oftalmologia': ['oftalmolog', 'oftalmologia', 'olhos'],
-    'Veterinário': ['veterinár', 'veterinario', 'pet health', 'animal health'],
-    'Bem-estar': ['bem-estar', 'wellness', 'bem estar'],
+    'Dental/Odonto': ['dental', 'odonto', 'odontológic'],
+    'Oftalmologia': ['oftalmolog', 'oftalmologia'],
+    'Oncologia': ['oncolog', 'oncologia'],
+    'Veterinário': ['veterinár', 'veterinario', 'pet health', 'animal health', 'saúde animal'],
+    'Bem-estar/Wellness': ['bem-estar', 'wellness', 'bem estar', 'saudabilidade'],
+    'Nutrição Clínica': ['nutrição clínica', 'nutricao clinica'],
     // Consumo
-    'Beleza': ['beleza', 'cosmético', 'cosmetico', 'beauty'],
-    'Moda': ['moda', 'vestuário', 'vestuario', 'fashion', 'roupa'],
+    'Beleza/Cosméticos': ['beleza', 'cosmético', 'cosmetico', 'beauty', 'hpc', 'personal care'],
+    'Moda': ['moda', 'vestuário', 'vestuario', 'fashion'],
     'Alimentos': ['alimento', 'food', 'comida', 'bebida'],
-    'Pet': ['pet', 'animal de estimação'],
-    'Varejo': ['varejo', 'retail', 'loja'],
+    'Alimentos Saudáveis': ['alimento saudável', 'alimentação saudável', 'saudáveis'],
+    'Pet': ['pet ', 'animal de estimação', 'ração animal'],
+    'Varejo': ['varejo', 'retail'],
+    'Varejo Alimentar': ['varejo alimentar', 'supermercado', 'atacarejo'],
     'Supermercados': ['supermercado', 'supermarket'],
-    'Restaurantes': ['restaurante', 'food service'],
+    'Restaurantes': ['restaurante', 'food service', 'catering'],
+    'Chocolates/Doces': ['chocolate', 'doces', 'confeitos'],
+    'Suplementos/Vitaminas': ['suplemento', 'vitamina', 'minerais'],
     // Agro
-    'Insumos': ['insumo', 'input'],
-    'Fertilizantes': ['fertilizante', 'adubo'],
-    'Sementes': ['semente', 'seed'],
+    'Agronegócio': ['agronegócio', 'agro ', 'agribusiness'],
+    'Insumos Agrícolas': ['insumo', 'input agrícola', 'distribuição de insumos'],
+    'Fertilizantes': ['fertilizante', 'adubo', 'nutrientes foliares'],
+    'Bioinsumos': ['bioinsumo', 'biológico', 'biodefensivo', 'defensivo biológico'],
     'Defensivos': ['defensivo', 'agroquímico', 'agroquimico'],
-    'Nutrição Animal': ['nutrição animal', 'nutricao animal', 'ração', 'racao'],
-    'Biológicos': ['biológico', 'biologico', 'bio'],
+    'Sementes': ['semente', 'seed'],
+    'Nutrição Animal': ['nutrição animal', 'nutricao animal', 'ração'],
+    'Pecuária': ['pecuária', 'pecuaria', 'gado', 'leiteira'],
+    'Pós-colheita': ['pós-colheita', 'pos-colheita', 'armazenagem'],
     // Educação
-    'Ensino Básico': ['ensino básico', 'ensino basico', 'fundamental', 'médio'],
-    'Ensino Superior': ['ensino superior', 'universidade', 'faculdade'],
-    'Cursos Livres': ['curso livre', 'cursos livres', 'profissionalizante'],
+    'Educação': ['educação', 'educacao', 'ensino'],
+    'Ensino Básico/K-12': ['ensino básico', 'ensino basico', 'k-12', 'k12', 'fundamental', 'educação básica'],
+    'Ensino Superior': ['ensino superior', 'universidade', 'faculdade', 'ies'],
+    'Cursos Livres': ['curso livre', 'cursos livres', 'profissionalizante', 'técnico'],
     'Idiomas': ['idioma', 'inglês', 'ingles', 'language'],
+    'EAD': [' ead ', 'ensino a distância', 'educação a distância'],
     // Serviços
-    'BPO': ['bpo', 'terceirização', 'terceirizacao', 'outsourcing'],
-    'Facilities': ['facilities', 'facility', 'predial'],
-    'Segurança': ['segurança', 'seguranca', 'security', 'vigilância'],
+    'BPO': [' bpo ', 'terceirização', 'terceirizacao', 'outsourcing'],
+    'Facilities': ['facilities', 'facility', 'predial', 'manutenção'],
+    'Segurança': ['segurança patrimonial', 'seguranca', 'security', 'vigilância'],
     'Logística': ['logística', 'logistica', 'transporte', 'frete'],
     'Consultoria': ['consultoria', 'consulting'],
+    'Locação/Rental': ['locação', 'rental', 'aluguel de equipamento'],
     // Financeiro
+    'Serviços Financeiros': ['serviço financeiro', 'financial service', 'serviços financeiros'],
     'Meios de Pagamento': ['pagamento', 'payment', 'adquirência', 'adquirencia'],
     'Crédito': ['crédito', 'credito', 'lending', 'empréstimo'],
     'Seguros': ['seguro', 'insurance'],
     'Corretora': ['corretora', 'broker'],
-    'Gestão de Ativos': ['asset management', 'gestão de ativos'],
+    'Gestão de Ativos': ['asset management', 'gestão de ativos', 'gestão de recursos'],
+    'Consórcios': ['consórcio', 'consorcio'],
+    'Previdência': ['previdência', 'previdencia'],
     // Infraestrutura
-    'Saneamento': ['saneamento', 'água', 'agua', 'esgoto'],
+    'Saneamento': ['saneamento', 'água', 'esgoto'],
     'Energia': ['energia', 'energy', 'elétric', 'eletric'],
-    'Energia Renovável': ['renovável', 'renovavel', 'solar', 'eólica', 'eolica'],
+    'Energia Renovável': ['renovável', 'renovavel', 'solar', 'eólica', 'eolica', 'fotovoltaica'],
+    'Geração Distribuída': ['geração distribuída', 'geracao distribuida'],
     'Telecom': ['telecom', 'telecomunicaç'],
     'Data Center': ['data center', 'datacenter'],
+    'Infraestrutura': ['infraestrutura', 'infra '],
+    // Industrial
+    'Industrial': ['industrial', 'industrials', 'manufatura', 'fábrica'],
+    'Embalagens': ['embalagem', 'embalagens'],
+    'Materiais de Construção': ['material de construção', 'materiais de construção', 'construção civil'],
+    'Autopeças': ['autopeça', 'autopeca', 'autopeças'],
+    'Químicos': ['químic', 'quimic', 'chemical'],
+    // Outros
+    'Real Estate': ['real estate', 'imobili', 'imóve'],
+    'Mineração': ['mineração', 'mineracao', 'mining'],
+    'Smart Cities': ['smart city', 'smart cities', 'cidade inteligente'],
+    'ESG': [' esg ', 'sustentabilidade', 'economia circular'],
+    'Bioeconomia': ['bioeconomia', 'bio economia'],
+    'Carbono': ['carbono', 'crédito de carbono'],
   }
-
-  const textoLower = texto.toLowerCase()
 
   // Procurar cada segmento conhecido
   for (const [segmento, keywords] of Object.entries(segmentosConhecidos)) {
@@ -296,40 +361,46 @@ function extrairSetores(texto: string): string[] {
 
   // Mapear para nomes padronizados de setores macro
   if (textoLower.includes('tech') || textoLower.includes('software') || textoLower.includes('saas') ||
-      textoLower.includes('digital') || textoLower.includes('ti ') || textoLower.includes('tecnologia')) {
+      textoLower.includes('digital') || textoLower.includes('ti ') || textoLower.includes('tecnologia') ||
+      textoLower.includes('tmt')) {
     setoresEncontrados.push('Tecnologia')
   }
   if (textoLower.includes('saúde') || textoLower.includes('saude') || textoLower.includes('health') ||
       textoLower.includes('hospital') || textoLower.includes('clínica') || textoLower.includes('clinica') ||
-      textoLower.includes('médic') || textoLower.includes('medic')) {
+      textoLower.includes('médic') || textoLower.includes('medic') || textoLower.includes('diagnóstic') ||
+      textoLower.includes('farmac') || textoLower.includes('oncolog')) {
     setoresEncontrados.push('Saúde')
   }
   if (textoLower.includes('consumo') || textoLower.includes('consumer') || textoLower.includes('varejo') ||
-      textoLower.includes('retail') || textoLower.includes('cpg')) {
+      textoLower.includes('retail') || textoLower.includes('cpg') || textoLower.includes('alimento') ||
+      textoLower.includes('beleza') || textoLower.includes('moda')) {
     setoresEncontrados.push('Consumo')
   }
   if (textoLower.includes('agro') || textoLower.includes('agri') || textoLower.includes('rural') ||
-      textoLower.includes('fazenda') || textoLower.includes('agrícola') || textoLower.includes('agricola')) {
+      textoLower.includes('fazenda') || textoLower.includes('agrícola') || textoLower.includes('agricola') ||
+      textoLower.includes('pecuár') || textoLower.includes('bioinsumo')) {
     setoresEncontrados.push('Agronegócio')
   }
   if (textoLower.includes('educa') || textoLower.includes('ensino') || textoLower.includes('escola') ||
-      textoLower.includes('universidade') || textoLower.includes('faculdade')) {
+      textoLower.includes('universidade') || textoLower.includes('faculdade') || textoLower.includes('ead')) {
     setoresEncontrados.push('Educação')
   }
   if (textoLower.includes('serviço') || textoLower.includes('servico') || textoLower.includes('service') ||
-      textoLower.includes('b2b') || textoLower.includes('bpo')) {
+      textoLower.includes('b2b') || textoLower.includes('bpo') || textoLower.includes('facilities') ||
+      textoLower.includes('terceirização')) {
     setoresEncontrados.push('Serviços')
   }
   if (textoLower.includes('infra') || textoLower.includes('saneamento') || textoLower.includes('energia') ||
-      textoLower.includes('utilities')) {
+      textoLower.includes('utilities') || textoLower.includes('telecom')) {
     setoresEncontrados.push('Infraestrutura')
   }
   if (textoLower.includes('financ') || textoLower.includes('fintech') || textoLower.includes('banking') ||
-      textoLower.includes('banco') || textoLower.includes('seguro') || textoLower.includes('pagamento')) {
+      textoLower.includes('banco') || textoLower.includes('seguro') || textoLower.includes('pagamento') ||
+      textoLower.includes('crédito')) {
     setoresEncontrados.push('Serv. Financeiros')
   }
   if (textoLower.includes('industr') || textoLower.includes('manufatura') || textoLower.includes('fábrica') ||
-      textoLower.includes('fabrica')) {
+      textoLower.includes('fabrica') || textoLower.includes('embalagem') || textoLower.includes('químic')) {
     setoresEncontrados.push('Industrial')
   }
   if (textoLower.includes('logist') || textoLower.includes('logíst') || textoLower.includes('transporte') ||
@@ -340,11 +411,62 @@ function extrairSetores(texto: string): string[] {
       textoLower.includes('imove') || textoLower.includes('propriedade')) {
     setoresEncontrados.push('Real Estate')
   }
-  if (textoLower.includes('telecom') || textoLower.includes('telecomunica')) {
-    setoresEncontrados.push('Telecom')
-  }
 
   return [...new Set(setoresEncontrados)]
+}
+
+/**
+ * Extrai tipo de deal ideal (controle, minoritário, etc)
+ */
+function extrairTipoDeal(texto: string): string | undefined {
+  if (!texto) return undefined
+
+  const infoRecente = extrairInfoMaisRecente(texto)
+  const textoLower = infoRecente.toLowerCase()
+
+  const tipos: string[] = []
+
+  if (textoLower.includes('controle') || textoLower.includes('100%')) {
+    tipos.push('Controle')
+  }
+  if (textoLower.includes('minoritár') || textoLower.includes('minoritario')) {
+    tipos.push('Minoritário')
+  }
+  if (textoLower.includes('majoritár') || textoLower.includes('majoritario')) {
+    tipos.push('Majoritário')
+  }
+  if (textoLower.includes('growth') || textoLower.includes('late stage')) {
+    tipos.push('Growth')
+  }
+  if (textoLower.includes('vc') || textoLower.includes('venture') || textoLower.includes('seed') || textoLower.includes('series a')) {
+    tipos.push('VC')
+  }
+
+  return tipos.length > 0 ? tipos.join(', ') : undefined
+}
+
+/**
+ * Extrai empresas do portfolio mencionadas
+ */
+function extrairPortfolio(texto: string): string[] {
+  if (!texto) return []
+
+  // Pegar nomes de empresas do texto (geralmente antes de parênteses ou entre vírgulas)
+  const empresas: string[] = []
+
+  // Padrão: Nome (descrição), Nome2 (descrição2)
+  const pattern = /([A-Z][A-Za-zÀ-ÿ\s&\-\.]+?)(?:\s*\([^)]+\))?(?:,|;|\.|$)/g
+  let match
+
+  while ((match = pattern.exec(texto)) !== null) {
+    const nome = match[1].trim()
+    // Filtrar palavras muito curtas ou que não parecem nomes de empresa
+    if (nome.length > 2 && !nome.match(/^(Add|Para|Mas|Das|São|Não|Que|Com|Por|Uma|Tem|Ver|Sim|Já|etc)$/i)) {
+      empresas.push(nome)
+    }
+  }
+
+  return empresas.slice(0, 15) // Limitar a 15 empresas
 }
 
 /**
@@ -370,29 +492,32 @@ export function extractFundosData(excelData: ExcelData): FundoData[] {
   return fundosSheet.rows.map((row, index): FundoData => {
     // Nome do fundo
     const nome = getRowValue(row, headers, 'Fundo', 'Nome', 'Nome do Fundo') ||
-                 row['__col_0'] || row['__col_1'] || `Fundo ${index + 1}`
+                 row['__col_0'] || `Fundo ${index + 1}`
 
     // Ticket (coluna específica) - extrair valor monetário do texto
     const ticketRaw = getRowValue(row, headers, 'Ticket', 'Ticket Médio', 'Cheque')
-    const ticketMedio = extrairTicket(String(ticketRaw || '')) || String(ticketRaw || '').trim()
+    const ticketMedio = extrairTicket(String(ticketRaw || ''))
 
     // Tipo ideal de deal/empresa
-    const tipoIdeal = getRowValue(row, headers, 'Tipo ideal', 'Tipo de deal', 'Deal ideal', 'Tipo ideal de deal')
+    const tipoIdealRaw = getRowValue(row, headers, 'Tipo ideal', 'Tipo de deal', 'Deal ideal', 'Tipo ideal de deal')
+    const tipoIdeal = extrairTipoDeal(String(tipoIdealRaw || ''))
 
     // Setores de maior interesse - este campo contém os segmentos detalhados
-    const setoresRaw = getRowValue(row, headers, 'Setores', 'Setores de maior interesse', 'Setor', 'Interesse')
+    const setoresRaw = getRowValue(row, headers, 'Setores', 'Setores de maior interesse', 'Setor', 'Interesse', 'restrições')
     const setoresTexto = String(setoresRaw || '')
 
     // Extrair setores macro e segmentos específicos
     const setoresExtraidos = extrairSetores(setoresTexto)
     const segmentosExtraidos = extrairSegmentosDeInteresse(setoresTexto)
 
-    // Tentar extrair faturamento mínimo do texto de setores ou ticket
+    // Tentar extrair faturamento mínimo do texto de setores ou tipo ideal
     const faturamentoMinimo = extrairFaturamentoMinimo(setoresTexto) ||
+                              extrairFaturamentoMinimo(String(tipoIdealRaw || '')) ||
                               extrairFaturamentoMinimo(String(ticketRaw || ''))
 
     // Portfolio
-    const portfolio = getRowValue(row, headers, 'Portfolio', 'Portfólio', 'Empresas')
+    const portfolioRaw = getRowValue(row, headers, 'Portfolio', 'Portfólio', 'Empresas')
+    const portfolioEmpresas = extrairPortfolio(String(portfolioRaw || ''))
 
     // Contatos
     const contato = getRowValue(row, headers, 'Contatos chave', 'Contato', 'Contatos', 'Responsável')
@@ -400,20 +525,14 @@ export function extractFundosData(excelData: ExcelData): FundoData[] {
     const email = getRowValue(row, headers, 'E-mail', 'Email', 'Mail', 'E-Mail')
 
     // Log para debug do primeiro fundo
-    if (index === 0) {
-      console.log('=== PRIMEIRO FUNDO MAPEADO ===')
+    if (index < 3) {
+      console.log(`=== FUNDO ${index + 1}: ${nome} ===`)
       console.log({
-        nome,
         ticketMedio,
         tipoIdeal,
-        setoresTexto,
         setoresExtraidos,
-        segmentosExtraidos,
+        segmentosExtraidos: segmentosExtraidos.slice(0, 10),
         faturamentoMinimo,
-        portfolio,
-        contato,
-        telefone,
-        email
       })
     }
 
@@ -421,11 +540,11 @@ export function extractFundosData(excelData: ExcelData): FundoData[] {
       id: `fundo-${index + 1}`,
       nome: String(nome).trim(),
       setores: setoresExtraidos,
-      segmentos: segmentosExtraidos, // Segmentos específicos/subsetores
+      segmentos: segmentosExtraidos,
       ticketMedio: ticketMedio || undefined,
       faturamentoMinimo: faturamentoMinimo || undefined,
-      dealIdeal: String(tipoIdeal || '').trim() || undefined,
-      portfolio: String(portfolio || '').trim() || undefined,
+      dealIdeal: tipoIdeal || undefined,
+      portfolio: portfolioEmpresas.join(', ') || undefined,
       contato: String(contato || '').trim() || undefined,
       telefone: String(telefone || '').trim() || undefined,
       email: String(email || '').trim() || undefined,
