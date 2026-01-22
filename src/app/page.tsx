@@ -198,9 +198,9 @@ export default function DashboardPage() {
                                   <span className="inline-block px-2 py-0.5 bg-slate-200 text-slate-500 text-xs rounded cursor-pointer hover:bg-slate-300 transition-colors">
                                     +{item.segmentos.length - 4}
                                   </span>
-                                  {/* Tooltip */}
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-50">
-                                    <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 shadow-lg max-w-xs">
+                                  {/* Tooltip - aparece para baixo e alinhado à esquerda */}
+                                  <div className="absolute top-full left-0 mt-2 hidden group-hover:block z-50">
+                                    <div className="bg-slate-800 text-white text-xs rounded-lg py-2 px-3 shadow-lg min-w-[200px] max-w-md">
                                       <p className="font-medium mb-1 text-slate-300">Mais segmentos:</p>
                                       <div className="flex flex-wrap gap-1">
                                         {item.segmentos.slice(4).map((seg, i) => (
@@ -213,7 +213,7 @@ export default function DashboardPage() {
                                         ))}
                                       </div>
                                       {/* Seta do tooltip */}
-                                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-800"></div>
+                                      <div className="absolute bottom-full left-4 border-4 border-transparent border-b-slate-800"></div>
                                     </div>
                                   </div>
                                 </div>
