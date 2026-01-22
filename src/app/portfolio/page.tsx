@@ -9,7 +9,6 @@ import { Input } from '@/components/ui/input'
 import { useData, PortfolioEmpresa } from '@/contexts/DataContext'
 import {
   Search,
-  Plus,
   Building2,
   ChevronDown,
   ChevronRight,
@@ -17,7 +16,6 @@ import {
   Calendar,
   ExternalLink,
   Target,
-  Filter,
 } from 'lucide-react'
 
 const statusCor: Record<string, string> = {
@@ -307,10 +305,6 @@ export default function PortfolioPage() {
             >
               <Target className="h-4 w-4" />
               Apenas buscando add-on
-            </Button>
-            <Button className="ml-auto">
-              <Plus className="h-4 w-4 mr-2" />
-              Nova Empresa
             </Button>
           </div>
 
